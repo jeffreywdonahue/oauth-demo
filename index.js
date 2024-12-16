@@ -1,32 +1,40 @@
 const express = require('express');
-
-const { initiateAuth } = require('./lib/initiate'); // Import both functions
-const { exchangeAuthCodeForToken } = require('./lib/exchange'); // Import both functions
-const { refreshToken } = require('./lib/refresh'); // Adjust as per your module
-const { handleCallback } = require('./lib/callback'); // Adjust as per your module
+const cron = require('node-cron');
+const { exchangeInstallIdForToken } = require('./lib/exchange');
+const { refreshAccessToken } = require('./lib/refresh');
 
 const app = express();
 
-// Middleware for error handling
-function asyncHandler(fn) {
-    return function (req, res, next) {
-        Promise.resolve(fn(req, res, next)).catch(next);
-    };
-}
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-    console.error('An error occurred:', err);
-    res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
+// Routes
+app.get('/token', async (req, res) => {
+    console.log('[INFO] /token endpoint hit. Attempting to exchange installation ID for token...');
+    await exchangeInstallIdForToken(req, res);
+    console.log('[INFO] Finished processing /token request.');
 });
 
-// Routes with error handling
-app.get('/initiate', asyncHandler(initiateAuth)); // Use initiateAuth for initiating OAuth flow
-app.get('/exchange', asyncHandler(exchangeAuthCodeForToken)); // Use exchangeAuthCodeForToken for token exchange
-app.get('/refresh', asyncHandler(refreshToken)); // Use refreshToken for refreshing tokens
-app.get('/oauth/callback', asyncHandler(handleCallback)); // Use handleCallback for OAuth callback
+app.get('/refresh', async (req, res) => {
+    console.log('[INFO] /refresh endpoint hit. Attempting to manually refresh the token...');
+    await refreshAccessToken(req, res);
+    console.log('[INFO] Finished processing /refresh request.');
+});
+
+// Schedule token refresh every minute
+cron.schedule('* * * * *', async () => {
+    console.log('[CRON] Running token refresh...');
+    try {
+        await refreshAccessToken();
+        console.log('[CRON] Token refresh completed successfully.');
+    } catch (error) {
+        console.error('[CRON ERROR] Failed to refresh token:', error.message);
+    }
+});
 
 // Start the server
 app.listen(3000, () => {
-    console.log("App Listening on 3000 !");
+    console.log('[INFO] App Listening on port 3000!');
+    console.log('[INFO] Endpoints available:');
+    console.log('  [GET] /token   - Exchange installation ID for token.');
+    console.log('  [GET] /refresh - Manually refresh the access token.');
+    console.log('[INFO] Cron job is set to refresh token every minute.');
 });
+
